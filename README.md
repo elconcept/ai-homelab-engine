@@ -51,3 +51,8 @@ Keep all lifecycle actions enabled: `plan`, `apply`, `destroy`, `docker build`, 
 **Security boundary:** Only trusted maintainers should have write access to `main`. Workflows are manually dispatched, and third-party code built through the Docker workflow is not given infrastructure secrets. Never add a plaintext `.env` to this public repository.
 
 **Cloud control plane:** `ai-admin-tools` at `ai.xlap.pl` aggregates Cloudflare, Portainer, Synology, Google Cloud, Azure and other MCP services; current availability is documented in the private vault.
+
+## Verified execution
+
+- 2026-11-22: [GHCR smoke workflow run #45041105017](https://github.com/elconcept/ai-homelab-engine/actions/runs/45041105017) completed successfully with the test `examples/hello/Dockerfile`.
+- `tofu-ops.yml` is recognized and enabled by GitHub. Its remote R2 plan test remains pending until the repository's Actions Secrets have been populated.
