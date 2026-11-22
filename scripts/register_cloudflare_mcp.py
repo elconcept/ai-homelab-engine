@@ -75,6 +75,7 @@ for server_id, name, url, key in SPECS:
         existing = None
     if existing:
         body.pop("id")
+        body.pop("auth_type")  # Auth mechanism is fixed on update; preserve Bearer
         api("PUT", "/servers/" + server_id, body)
         operation = "updated"
     else:
@@ -104,6 +105,11 @@ seen = {node["server_id"] for node in preserved}
 for server_id in registered:
     if server_id not in seen:
         preserved.append({"server_id": server_id, "on_behalf": False, "default_disabled": False})
+    else:
+        for node in preserved:
+            if node["server_id"] == server_id:
+                node["on_behalf"] = False
+                node["default_disabled"] = False
 
 api("PUT", "/portals/" + PORTAL_ID, {
     "name": portal["name"],
