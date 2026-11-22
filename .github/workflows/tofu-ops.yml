@@ -1,0 +1,105 @@
+name: OpenTofu Operations
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "OpenTofu action (full lifecycle)"
+        required: true
+        type: choice
+        default: plan
+        options:
+          - plan
+          - apply
+          - destroy
+      stack_dir:
+        description: "Relative stack directory inside iac/stacks"
+        required: true
+        default: iac/stacks/bootstrap
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homelab-tofu-${{ inputs.stack_dir }}
+  cancel-in-progress: false
+
+jobs:
+  tofu:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID || secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY || secrets.AWS_SECRET_ACCESS_KEY }}
+      R2_ENDPOINT: ${{ secrets.R2_DEFAULT_ENDPOINT || secrets.AWS_ENDPOINT_URL_S3 }}
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OpenTofu
+        uses: opentofu/setup-opentofu@v1
+
+      - name: Validate operation, stack and R2 secrets
+        id: select
+        shell: bash
+        env:
+          REQUESTED_ACTION: ${{ inputs.action }}
+          REQUESTED_STACK: ${{ inputs.stack_dir }}
+        run: |
+          set -euo pipefail
+          case "$REQUESTED_ACTION" in plan|apply|destroy) ;; *) exit 2 ;; esac
+          base="$(realpath -m "$GITHUB_WORKSPACE/iac/stacks")"
+          target="$(realpath -m "$GITHUB_WORKSPACE/$REQUESTED_STACK")"
+          [[ "$target" == "$base/"* ]] || { echo "Stack must be under iac/stacks/"; exit 2; }
+          [[ -f "$target/backend.tf" ]] || { echo "No backend.tf in stack"; exit 2; }
+          [[ -n "$AWS_ACCESS_KEY_ID" && -n "$AWS_SECRET_ACCESS_KEY" && -n "$R2_ENDPOINT" ]] || {
+            echo "Missing GitHub Actions Secrets for R2 backend"; exit 2;
+          }
+          [[ "$R2_ENDPOINT" == https://* ]] || { echo "R2 endpoint must be HTTPS"; exit 2; }
+          echo "directory=$target" >> "$GITHUB_OUTPUT"
+          relative="${target#"$base/"}"
+          echo "state_key=homelab/$relative/terraform.tfstate" >> "$GITHUB_OUTPUT"
+
+      - name: Initialize remote R2 backend
+        working-directory: ${{ steps.select.outputs.directory }}
+        shell: bash
+        env:
+          STATE_KEY: ${{ steps.select.outputs.state_key }}
+        run: |
+          set -euo pipefail
+          tofu init -input=false -no-color -reconfigure \
+            -backend-config="bucket=tfstate-homelab" \
+            -backend-config="key=$STATE_KEY" \
+            -backend-config="region=auto" \
+            -backend-config="endpoints={s3=\"$R2_ENDPOINT\"}" \
+            -backend-config="use_path_style=true" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_requesting_account_id=true" \
+            -backend-config="skip_s3_checksum=true"
+
+      - name: Validate stack
+        working-directory: ${{ steps.select.outputs.directory }}
+        run: tofu validate -no-color
+
+      - name: Plan
+        if: ${{ inputs.action == 'plan' }}
+        working-directory: ${{ steps.select.outputs.directory }}
+        run: tofu plan -input=false -no-color -lock-timeout=5m
+
+      - name: Apply
+        if: ${{ inputs.action == 'apply' }}
+        working-directory: ${{ steps.select.outputs.directory }}
+        run: tofu apply -input=false -no-color -auto-approve -lock-timeout=5m
+
+      - name: Destroy
+        if: ${{ inputs.action == 'destroy' }}
+        working-directory: ${{ steps.select.outputs.directory }}
+        run: tofu destroy -input=false -no-color -auto-approve -lock-timeout=5m
