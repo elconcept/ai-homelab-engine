@@ -56,3 +56,21 @@ Keep all lifecycle actions enabled: `plan`, `apply`, `destroy`, `docker build`, 
 
 - 2026-11-22: [GHCR smoke workflow run #45041105017](https://github.com/elconcept/ai-homelab-engine/actions/runs/45041105017) completed successfully with the test `examples/hello/Dockerfile`.
 - `tofu-ops.yml` is recognized and enabled by GitHub. Its remote R2 plan test remains pending until the repository's Actions Secrets have been populated.
+
+## Cloudflare MCP registration
+
+The manual workflow [`register-cloudflare-mcp.yml`](.github/workflows/register-cloudflare-mcp.yml) runs [`scripts/register_cloudflare_mcp.py`](scripts/register_cloudflare_mcp.py) and registers **nine** token-authenticated endpoints: Azure, GCP Workspace, GCP Personal, DS1821+ Desktop Commander, Hugging Face, GitHub, Render, Tavily and Resend. It preserves existing portal server entries and Code Mode.
+
+All provider bearer tokens are already stored in GitHub Actions Secrets. The only missing credential is **`CF_API_TOKEN`**, a Cloudflare API token with the **MCP Portals Write** account permission, which is distinct from Cloudflare Access service-token credentials (`CF_CLIENT_*`). Add it to Actions Secrets before dispatching; no other secret values should be copied into workflow inputs.
+
+Once present, run:
+
+```bash
+gh workflow run register-cloudflare-mcp.yml -R elconcept/ai-homelab-engine --ref main
+```
+
+The workflow must be followed by provider-level smoke tests. The script confirms registration and portal attachment but does not falsely assert working credentials or successful `tools/list` at each upstream.
+
+Vercel and Supabase are intentionally **excluded** from this Bearer batch. Official Vercel MCP documents OAuth, not general acceptance of Vercel REST API tokens. Both previously failed OAuth registration through the Cloudflare API. Register them via Cloudflare GUI/OAuth, or test a separately supported method; do not create untested placeholder server records.
+
+Upstash likewise requires additional account metadata (`UPSTASH_EMAIL`) for the local stdio server and is not yet included.
