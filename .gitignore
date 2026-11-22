@@ -1,0 +1,11 @@
+# Public execution repository: never commit plaintext secrets
+.env
+.env.*
+!.env.example
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfbackend
+.terraform/
+*.tfvars
+*.tfvars.json
