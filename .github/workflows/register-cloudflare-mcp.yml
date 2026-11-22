@@ -1,0 +1,31 @@
+name: Synchronize Cloudflare MCP Portal (Bearer)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-mcp-portal
+  cancel-in-progress: false
+
+jobs:
+  register:
+    name: Register and attach Bearer MCP servers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+      MCP_BRIDGE_API_KEY: ${{ secrets.MCP_BRIDGE_API_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HOMELAB_GH_PAT: ${{ secrets.HOMELAB_GH_PAT }}
+      RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+    steps:
+      - name: Check out known registration manifest
+        uses: actions/checkout@v4
+
+      - name: Register MCP servers and attach to existing portal
+        run: python3 scripts/register_cloudflare_mcp.py
